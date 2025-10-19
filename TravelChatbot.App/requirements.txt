@@ -1,0 +1,6 @@
+openai
+
+tenacity
+python-dotenv
+boto3
+botocore
