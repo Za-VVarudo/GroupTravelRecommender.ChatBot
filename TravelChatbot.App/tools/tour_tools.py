@@ -1,3 +1,4 @@
+import time
 import boto3
 from botocore.exceptions import ClientError
 from config import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
@@ -132,3 +133,98 @@ def get_tours(place: Optional[str] = None) -> List[Dict[str, Any]]:
 
     except ClientError as e:
         return [{"error": e.response["Error"]["Message"]}]
+    
+
+register_tour_function = {
+    "type": "function",
+    "function": {
+        "name": "register_tour",
+        "description": "Register a tour for a phone number. Requires tourId and phoneNumber.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tourId": {"type": "string"},
+                "phoneNumber": {"type": "string"}
+            },
+            "required": ["tourId", "phoneNumber"]
+        }
+    }
+}
+
+def register_tour(tourId: str, phoneNumber: str) -> Dict[str, Any]:
+    """
+    Register a tour for a user.
+
+    Steps:
+    - Verify the tour exists by querying the Tours table using the tourId-index.
+      If not found, raises ValueError("tour not found").
+    - Check if the user already registered the tour in UserTours using tourId and phoneNumber
+      as the table's partition/sort key combination. If found, raises ValueError("tour is registered").
+    - If not registered, insert a new item into UserTours with tourId, phoneNumber, createAt (epoch),
+      and startDate from the found tour.
+
+    Returns:
+        Dict with the created item on success.
+
+    Raises:
+        ValueError: for "tour not found" or "tour is registered".
+        ClientError: for AWS errors.
+    """
+    dynamodb = boto3.client(
+        "dynamodb",
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        region_name=AWS_REGION
+    )
+
+    try:
+        # 1) Find the tour by tourId using the tourId-index
+        resp = dynamodb.query(
+            TableName="Tours",
+            IndexName="tourId-index",
+            KeyConditionExpression="tourId = :t",
+            ExpressionAttributeValues={":t": {"S": tourId}},
+            Limit=1
+        )
+        items = resp.get("Items", [])
+        if not items:
+            raise ValueError("tour not found")
+
+        tour_item = items[0]
+        tour = Tour.from_dynamodb(tour_item)
+        start_date = int(tour.startDate)
+
+        # 2) Check if the tour is already registered for this phoneNumber
+        resp_check = dynamodb.query(
+            TableName="UserTours",
+            KeyConditionExpression="tourId = :t AND phoneNumber = :p",
+            ExpressionAttributeValues={
+                ":t": {"S": tourId},
+                ":p": {"S": phoneNumber}
+            },
+            Limit=1
+        )
+        if resp_check.get("Items"):
+            raise ValueError("tour is registered")
+
+        # 3) Register the tour
+        created_at = int(time.time())
+        dynamodb.put_item(
+            TableName="UserTours",
+            Item={
+                "tourId": {"S": tourId},
+                "phoneNumber": {"S": phoneNumber},
+                "createAt": {"N": str(created_at)},
+                "startDate": {"N": str(start_date)}
+            }
+        )
+
+        return {
+            "tourId": tourId,
+            "phoneNumber": phoneNumber,
+            "createAt": created_at,
+            "startDate": start_date
+        }
+
+    except ClientError as e:
+        return {"error": e.response["Error"]["Message"]}
