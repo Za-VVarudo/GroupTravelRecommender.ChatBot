@@ -4,3 +4,6 @@ tenacity
 python-dotenv
 boto3
 botocore
+chromadb
+numpy
+pandas

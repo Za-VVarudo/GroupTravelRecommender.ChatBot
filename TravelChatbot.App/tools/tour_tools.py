@@ -5,6 +5,7 @@ from config import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
 from models.tour import Tour
 from models.user_tour import UserTour
 from typing import List, Dict, Any, Optional
+from tools.tour_search import embed_tours, search_tours
 
 get_registered_tours_function = {
     "type": "function",
@@ -57,7 +58,10 @@ get_tours_function = {
     "function": {
         "name": "get_tours",
         "description": """
-            Retrieve existing tours. If a 'place' is provided, it queries tours for that location.
+            Retrieve existing tours. Supports three modes:
+            1. No parameters: returns all tours
+            2. place parameter: queries tours for that specific location
+            3. search_query parameter: performs semantic search based on the query
             Returns a list of tours as dictionaries."""
         ,
         "parameters": {
@@ -69,6 +73,13 @@ get_tours_function = {
                         "The name of the place in Vietnam to filter tours by. "
                         "If omitted, returns all available tours."
                     )
+                },
+                "search_query": {
+                    "type": "string",
+                    "description": (
+                        "Natural language query for semantic search. Examples: "
+                        "'tours in Hoi An', 'tours under 600000 VND'"
+                    )
                 }
             },
             "required": []
@@ -76,13 +87,16 @@ get_tours_function = {
     } 
 }
 
-def get_tours(place: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_tours(place: Optional[str] = None, search_query: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    Retrieve tours from the Tours DynamoDB table and map them to the Tour model.
-    If `place` is provided, query by partition key `place`; otherwise scan the table.
+    Retrieve tours from the Tours DynamoDB table and optionally perform semantic search.
+    If neither place nor search_query is provided, returns all tours.
+    If place is provided, filters by that place.
+    If search_query is provided, performs semantic search using ChromaDB.
 
     Args:
         place (Optional[str]): partition key to filter tours by place.
+        search_query (Optional[str]): natural language query for semantic search.
 
     Returns:
         List[Dict[str, Any]]: A list of tours as dictionaries, or a list with an error dict on failure.
@@ -128,6 +142,13 @@ def get_tours(place: Optional[str] = None) -> List[Dict[str, Any]]:
                 )
                 items = response.get("Items", [])
                 tours.extend([Tour.from_dynamodb(item).to_dict() for item in items])
+
+        # After getting all tours, update the ChromaDB embeddings
+        embed_tours(tours)
+
+        # If there's a search query, use semantic search
+        if search_query:
+            return search_tours(search_query)
 
         return tours
 
