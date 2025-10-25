@@ -55,11 +55,21 @@ def search_tours(query: str) -> List[Dict[str, Any]]:
     Search tours using natural language queries.
     
     Args:
-        query (str): Natural language query (e.g., "tours in Hoi An", "tours under 600000 VND")
+        query (str): Natural language query (e.g., "tours in Hoi An", "tours under 600000 VND", "tourId 123abc")
         
     Returns:
         List[Dict[str, Any]]: List of matching tour dictionaries
     """
+    # Check for tourId-based queries
+    tour_id_match = re.search(r'(?:tour ?id|id)[:\s]+([a-zA-Z0-9-]+)', query, re.IGNORECASE)
+    if tour_id_match:
+        tour_id = tour_id_match.group(1)
+        results = tour_collection.get(
+            ids=[tour_id],
+            include=["metadatas"]
+        )
+        return results["metadatas"] if results["metadatas"] else []
+
     # Check for price-based queries
     price_match = re.search(r'under\s+(\d+(?:,\d{3})*)\s*(?:vnd|VND)?', query, re.IGNORECASE)
     

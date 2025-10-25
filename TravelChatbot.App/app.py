@@ -68,18 +68,36 @@ def main():
                         match call.function.name:
                             case "get_registered_tours":
                                 args = json.loads(call.function.arguments)
-                                result = get_registered_tours(args["phoneNumber"])
-                                if not result:
+                                registered_tours = get_registered_tours(args["phoneNumber"])
+                                if not registered_tours:
                                     response_content = "I couldn't find any registered tours for that phone number."
                                 else:
                                     response_content = "Here are your registered tours:\n\n"
-                                    for tour in result:
-                                        response_content += str(tour) + "\n\n"
+                                    for reg_tour in registered_tours:
+                                        # Get full tour details from ChromaDB using tourId
+                                        tour_details = get_tours(search_query=f"tourId {reg_tour['tourId']}")
+                                        if tour_details:
+                                            tour = tour_details[0]
+                                            start = datetime.fromtimestamp(tour["startDate"]).strftime("%Y-%m-%d")
+                                            end = datetime.fromtimestamp(tour["endDate"]).strftime("%Y-%m-%d")
+                                            reg_date = datetime.fromtimestamp(reg_tour["createAt"]).strftime("%Y-%m-%d %H:%M")
+                                            response_content += f"""🎫 **Booking Details**
+- **Registration Date:** {reg_date}
+- **Tour:** {tour['title']}
+- **Place:** {tour['place']}
+- **Duration:** {start} → {end}
+- **Price:** {tour['price']:,} VND
+- **Category:** {tour['category']}
+- **Status:** {tour['status']}
+- **Tour ID:** {tour['tourId']}\n\n"""
+                                        else:
+                                            response_content += f"⚠️ Tour with ID {reg_tour['tourId']} not found in the system.\n\n"
 
                             case "get_tours":
                                 args = json.loads(call.function.arguments)
                                 place = args.get("place")
-                                result = get_tours(place)
+                                search_query = args.get("search_query")
+                                result = get_tours(place=place, search_query=search_query)
                                 if not result:
                                     response_content = "I couldn't find any tours matching your criteria."
                                 else:
@@ -93,7 +111,7 @@ def main():
 - **Duration:** {start} → {end}
 - **Price:** {tour['price']:,} VND
 - **Status:** {tour['status']}
-- **Tour ID:** {tour.get('id', 'N/A')}
+- **Tour ID:** {tour.get('tourId', 'N/A')}
 
 """
                             

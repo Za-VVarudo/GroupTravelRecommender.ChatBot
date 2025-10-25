@@ -78,7 +78,7 @@ get_tours_function = {
                     "type": "string",
                     "description": (
                         "Natural language query for semantic search. Examples: "
-                        "'tours in Hoi An', 'tours under 600000 VND'"
+                        "'tours in Hoi An', 'tours under 600000 VND', 'tourId abc123-xyz'"
                     )
                 }
             },
