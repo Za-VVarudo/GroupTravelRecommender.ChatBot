@@ -10,8 +10,9 @@ class Tour:
     startDate: int
     endDate: int
     price: int
-    status: Optional[str] = None
-    category: Optional[str] = None
+    status: Optional[str] = ""
+    category: Optional[str] = ""
+    heritageGuide: Optional[str] = ""
 
     @classmethod
     def from_dynamodb(cls, item: Dict[str, Any]) -> "Tour":
@@ -23,8 +24,9 @@ class Tour:
             startDate=int(item["startDate"]["N"]),
             endDate=int(item["endDate"]["N"]),
             price=int(item["price"]["N"]),
-            status=item.get("status", {}).get("S"),
-            category=item.get("category", {}).get("S"),
+            status=item.get("status", {}).get("S") or "",
+            category=item.get("category", {}).get("S") or "",
+            heritageGuide=item.get("heritageGuide", {}).get("S") or "",
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -38,6 +40,7 @@ class Tour:
             "price": self.price,
             "status": self.status,
             "category": self.category,
+            "heritageGuide": self.heritageGuide,
         }
 
     def to_dynamodb(self) -> Dict[str, Any]:
@@ -54,4 +57,6 @@ class Tour:
             item["status"] = {"S": self.status}
         if self.category:
             item["category"] = {"S": self.category}
+        if self.heritageGuide:
+            item["heritageGuide"] = {"S": self.heritageGuide}
         return item

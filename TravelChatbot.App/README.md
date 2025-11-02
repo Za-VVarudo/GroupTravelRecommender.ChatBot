@@ -1,258 +1,157 @@
 # TravelChatbot.App
 
-Lightweight CLI travel assistant that integrates Azure OpenAI and AWS DynamoDB to:
-- list available tours,
-- show a user's registered tours, and
-- register a user for a tour.
+An AI-powered travel assistant with an interactive chat interface that helps users discover, explore, and book tours in Vietnam. Built with Streamlit, Azure OpenAI, and AWS services.
 
-This repo contains:
-- app.py — simple CLI that talks with Azure OpenAI and invokes local tool functions,
-- tools/tour_tools.py — DynamoDB helpers (get_tours, get_registered_tours, register_tour),
-- models/ — data models (e.g. UserTour),
-- example/ — example result images (see below).
+## Key Features
 
----
+- 💬 **Natural Language Interface**: Chat naturally about tours, heritage sites, and travel plans
+- 🔍 **Smart Tour Search**: 
+  - Search by location: "Show me tours in Hoi An"
+  - Filter by price: "Find tours under 600,000 VND"
+  - Combine criteria: "Tours in Hue under 700,000 VND"
+- 🏛️ **Heritage Guide Information**:
+  - Get AI-powered explanations about cultural and historical sites
+  - Ask specific questions about local heritage
+  - Contextual information from curated guide content
+- ✅ **Tour Management**:
+  - Register for tours using tour ID and phone number
+  - View registered tours and booking details
+  - Check tour availability and status
+- 📄 **Pagination Support**:
+  - Browse through multiple tour options
+  - Explore extensive heritage information
+  - Request more results as needed
 
-## Requirements
+## Technology Stack
 
-- Python 3.10+
-- AWS credentials with DynamoDB access
-- Azure OpenAI deployment + key
-- Packages:
-  - boto3
-  - botocore
-  - python-dotenv
-  - openai (Azure OpenAI client provided in project)
-  - (install via pip)
+- **Frontend**: Streamlit
+- **AI/ML**: 
+  - Azure OpenAI (GPT-4, text embeddings)
+  - Pinecone (vector search)
+- **AWS Services**:
+  - DynamoDB (tour and user data)
+  - S3 (heritage guide storage)
+- **Languages/Frameworks**:
+  - Python 3.10+
+  - OpenAI API
+  - Boto3 (AWS SDK)
 
-Example:
+## Setup Requirements
+
+### 1. Python Environment
 ```bash
-python -m pip install boto3 botocore python-dotenv openai
+python -m pip install streamlit boto3 botocore python-dotenv openai pinecone-client
 ```
 
----
+### 2. Environment Variables (.env)
+```plaintext
+# AWS Configuration
+AWS_ACCESS_KEY_ID=your_key_id
+AWS_SECRET_ACCESS_KEY=your_secret_key
+AWS_REGION=your_region
+HERITAGE_GUIDE_S3_BUCKET=your_bucket_name
 
-## Environment variables
+# Azure OpenAI Configuration
+OPENAI_ENDPOINT=your_endpoint
+OPENAI_API_KEY=your_api_key
+OPENAI_DEPLOYMENT_NAME=your_deployment_name
+OPENAI_TEXT_EMBEDED_API_KEY=your_embedding_key
+OPENAI_TEXT_EMBEDED_DEPLOYMENT_NAME=your_embedding_deployment
 
-Create a `.env` file (project reads via python-dotenv). Required keys:
-
-- AWS_ACCESS_KEY_ID
-- AWS_SECRET_ACCESS_KEY
-- AWS_REGION
-- OPENAI_ENDPOINT
-- OPENAI_API_KEY
-- OPENAI_DEPLOYMENT_NAME
-
-The project includes `config.validate_config()` — ensure the variables are set before running.
-
----
-
-## DynamoDB expected tables & indexes
-
-The code expects two DynamoDB tables with these logical shapes:
-
-1. Tours (table name: `Tours`)
-   - Primary key: partition `place` (used by scan/query by place)
-   - Global Secondary Index: `tourId-index` with partition key `tourId` (used to lookup tour by tourId)
-   - Stored attributes expected on items: `tourId` (S), `place` (S), `startDate` (N), ...others
-
-2. UserTours (table name: `UserTours`)
-   - Primary key layout used by code: partition `tourId`, sort `phoneNumber` (the code queries with KeyConditionExpression "tourId = :t AND phoneNumber = :p")
-   - GSI: `phoneNumber-createAt-index` with partition key `phoneNumber` and sort key `createAt` (used to fetch a user's registered tours sorted by createAt)
-   - Stored attributes expected: `tourId` (S), `phoneNumber` (S), `createAt` (N), `startDate` (N)
-
-Adjust table schemas/indexes accordingly if you create the tables manually.
-
----
-
-## Usage
-
-Run the CLI:
-
-```powershell
-# Windows
-python app.py
+# Pinecone Configuration
+PINECONE_API_KEY=your_api_key
+PINECONE_ENVIRONMENT=your_environment
 ```
 
-Menu options:
-1. Retrieve existing tours — optionally enter a place to filter.
-2. Get registered tours — enter phone number to list registrations.
-3. Register for a tour — provide `tourId` and phone number. The program:
-   - looks up the tour by `tourId` using `tourId-index`.
-   - if not found => displays Assistant: tour not found
-   - checks UserTours for an existing registration (tourId + phoneNumber)
-   - if exists => displays Assistant: tour is registered
-   - otherwise writes a new item to `UserTours` with `createAt` (epoch) and `startDate` copied from the Tours item.
+### 3. Infrastructure Setup
 
-Errors from AWS are displayed back with the Assistant role (try/catch in app.py).
+#### DynamoDB Tables
 
----
+1. **Tours Table**
+   - Table Name: `Tours`
+   - Primary Key: `place` (partition)
+   - GSI: `tourId-index`
+   - Key Attributes:
+     ```
+     tourId (String)
+     place (String)
+     startDate (Number)
+     endDate (Number)
+     price (Number)
+     title (String)
+     category (String)
+     status (String)
+     heritageGuide (String)
+     ```
 
-## Implementation notes
+2. **UserTours Table**
+   - Table Name: `UserTours`
+   - Primary Key: `tourId` (partition), `phoneNumber` (sort)
+   - GSI: `phoneNumber-createAt-index`
+   - Key Attributes:
+     ```
+     tourId (String)
+     phoneNumber (String)
+     createAt (Number)
+     startDate (Number)
+     ```
 
-- Tools are defined to permit the Azure OpenAI function-style tool calling:
-  - get_tours_function
-  - get_registered_tours_function
-  - register_tour_function
-- DynamoDB interactions are implemented using boto3 low-level client; attribute value types are explicit (S / N).
-- Time for createAt uses `int(time.time())` (epoch seconds).
+#### Vector Databases (Pinecone)
 
----
+1. **Tours Index**
+   ```
+   Name: tours
+   Dimension: 1536
+   Metric: cosine
+   Environment: aws (serverless)
+   ```
 
-## Example results / images
+2. **Heritage Guides Index**
+   ```
+   Name: tour-heritage-guides
+   Dimension: 1536
+   Metric: cosine
+   Environment: aws (serverless)
+   ```
 
-The `example/` folder includes several sample output images produced by the app. To view them, open the files in your image viewer or in VS Code explorer:
-- d:\Save\TravelRecommender\TravelChatbot.App\example\
+## Running the Application
 
-  Retrieve tours (all):
-  ![Retrieve tours all](example/RetrieveTours.png)
+1. Clone the repository
+2. Set up environment variables
+3. Start the Streamlit server:
+   ```bash
+   streamlit run app.py
+   ```
 
-  Retrieve tours with place search:
-  ![Retrieve tours with place search](example/RetrieveTours_PlaceSearch.png)
+## Project Structure
 
-  Get registered tours by phone number:
-  ![Get registered tours by phone number](example/GetRegisteredTours.png)
-
-  Register for a tour:
-  ![Register for a tour](example/RegisterForATour.png)
-
-
----
-
-## Troubleshooting
-
-- AWS permission issues: verify IAM credentials can access DynamoDB and that the table names and index names match those expected in code.
-- Index or attribute errors: confirm the DynamoDB item attribute types (S/N) match code expectations.
-- Azure OpenAI issues: confirm endpoint, API key and deployment name are valid and the API version aligns with the client library in use.
-
----
+```
+TravelChatbot.App/
+├── app.py                 # Main Streamlit application
+├── config.py             # Configuration and environment validation
+├── requirements.txt      # Python dependencies
+├── models/
+│   ├── tour.py          # Tour data model
+│   └── user_tour.py     # User registration model
+├── tools/
+│   ├── tour_tools.py    # Core business logic
+│   └── tour_search.py   # Vector search implementation
+└── utilities/
+    ├── pdf_reader.py    # PDF processing utilities
+    └── s3_utils.py      # S3 interaction helpers
+```
 
 ## Contributing
 
-Small project — open issues or send PRs for fixes or feature suggestions.
-
----
+We welcome contributions! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Submit a pull request
 
 ## License
 
-MIT (or choose your preferred license).
-
-```// filepath: d:\Save\TravelRecommender\TravelChatbot.App\README.md
-
-# TravelChatbot.App
-
-Lightweight CLI travel assistant that integrates Azure OpenAI and AWS DynamoDB to:
-- list available tours,
-- show a user's registered tours, and
-- register a user for a tour.
-
-This repo contains:
-- app.py — simple CLI that talks with Azure OpenAI and invokes local tool functions,
-- tools/tour_tools.py — DynamoDB helpers (get_tours, get_registered_tours, register_tour),
-- models/ — data models (e.g. UserTour),
-- example/ — example result images (see below).
+MIT License
 
 ---
 
-## Requirements
-
-- Python 3.10+
-- AWS credentials with DynamoDB access
-- Azure OpenAI deployment + key
-- Packages:
-  - boto3
-  - botocore
-  - python-dotenv
-  - openai (Azure OpenAI client provided in project)
-  - (install via pip)
-
-Example:
-```bash
-python -m pip install boto3 botocore python-dotenv openai
-```
-
----
-
-## Environment variables
-
-Create a `.env` file (project reads via python-dotenv). Required keys:
-
-- AWS_ACCESS_KEY_ID
-- AWS_SECRET_ACCESS_KEY
-- AWS_REGION
-- OPENAI_ENDPOINT
-- OPENAI_API_KEY
-- OPENAI_DEPLOYMENT_NAME
-
-The project includes `config.validate_config()` — ensure the variables are set before running.
-
----
-
-## DynamoDB expected tables & indexes
-
-The code expects two DynamoDB tables with these logical shapes:
-
-1. Tours (table name: `Tours`)
-   - Primary key: partition `place` (used by scan/query by place)
-   - Global Secondary Index: `tourId-index` with partition key `tourId` (used to lookup tour by tourId)
-   - Stored attributes expected on items: `tourId` (S), `place` (S), `startDate` (N), ...others
-
-2. UserTours (table name: `UserTours`)
-   - Primary key layout used by code: partition `tourId`, sort `phoneNumber` (the code queries with KeyConditionExpression "tourId = :t AND phoneNumber = :p")
-   - GSI: `phoneNumber-createAt-index` with partition key `phoneNumber` and sort key `createAt` (used to fetch a user's registered tours sorted by createAt)
-   - Stored attributes expected: `tourId` (S), `phoneNumber` (S), `createAt` (N), `startDate` (N)
-
-Adjust table schemas/indexes accordingly if you create the tables manually.
-
----
-
-## Usage
-
-Run the CLI:
-
-```powershell
-# Windows
-python app.py
-```
-
-Menu options:
-1. Retrieve existing tours — optionally enter a place to filter.
-2. Get registered tours — enter phone number to list registrations.
-3. Register for a tour — provide `tourId` and phone number. The program:
-   - looks up the tour by `tourId` using `tourId-index`.
-   - if not found => displays Assistant: tour not found
-   - checks UserTours for an existing registration (tourId + phoneNumber)
-   - if exists => displays Assistant: tour is registered
-   - otherwise writes a new item to `UserTours` with `createAt` (epoch) and `startDate` copied from the Tours item.
-
-Errors from AWS are displayed back with the Assistant role (try/catch in app.py).
-
----
-
-## Implementation notes
-
-- Tools are defined to permit the Azure OpenAI function-style tool calling:
-  - get_tours_function
-  - get_registered_tours_function
-  - register_tour_function
-- DynamoDB interactions are implemented using boto3 low-level client; attribute value types are explicit (S / N).
-- Time for createAt uses `int(time.time())` (epoch seconds).
-
----
-
-## Example results / images
-
-The `example/` folder includes several sample output images produced by the app. To view them, open the files in your image viewer or in VS Code explorer:
-- d:\Save\TravelRecommender\TravelChatbot.App\example\
-
-(If images do not appear in the repository view, ensure your IDE file filters are not hiding them.)
-
----
-
-## Troubleshooting
-
-- AWS permission issues: verify IAM credentials can access DynamoDB and that the table names and index names match those expected in code.
-- Index or attribute errors: confirm the DynamoDB item attribute types (S/N) match code expectations.
-- Azure OpenAI issues: confirm endpoint, API key and deployment name are valid and the API version aligns with the client library in use.
-
----
+For support or questions, please open an issue in the repository.

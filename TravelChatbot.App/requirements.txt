@@ -4,6 +4,8 @@ tenacity
 python-dotenv
 boto3
 botocore
-chromadb
+pinecone
 numpy
 pandas
+PyPDF2
+langchain
