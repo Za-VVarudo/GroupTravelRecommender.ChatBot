@@ -2,7 +2,7 @@
 import io
 from PyPDF2 import PdfReader
 from typing import List
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
     """Extract text from PDF bytes using PyPDF2."""
