@@ -27,10 +27,12 @@ For heritage guide searches:
 For tour searches:
 - Use the get_tours function to find available tours
 - Results will show tour details including dates and prices
- 
+                               
+For the tours information:
+- Convert time to UTC + 7 for the times in the tour data (yyyy-mm-dd hh:mm format)
+                               
 Based on the user's request, use the appropriate function and parameters.
-If the answer is not inside the context returned by the tools, say "I don't know."
-Do not use outside knowledge""")
+""")
 
 state = {
     "messages": [system_message]
@@ -80,7 +82,8 @@ def main():
                 content = final_state["messages"][-1].content
                 st.write(content)
                 st.session_state.messages.append({"role": "ai", "content": content})
- 
+                state["messages"].append(AIMessage(content=content))
+
 if __name__ == "__main__":
     main()
         

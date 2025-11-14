@@ -14,7 +14,7 @@ from utilities.s3_utils import download_s3_object
 
 @tool(args_schema=GetRegisteredToursArgs)
 def get_registered_tours(phoneNumber: str) -> List[Dict[str, Any]]:
-    """Retrieve all registered tours for a given phone number."""
+    """Retrieve all registered tours for a given phone number with additional tour details."""
     dynamodb = boto3.client(
         "dynamodb",
         aws_access_key_id=AWS_ACCESS_KEY_ID,
@@ -31,8 +31,31 @@ def get_registered_tours(phoneNumber: str) -> List[Dict[str, Any]]:
         )
 
         items = response.get("Items", [])
-        tours = [UserTour.from_dynamodb(item).to_dict() for item in items]
-        return tours
+        registered_tours = []
+        
+        for item in items:
+            user_tour = UserTour.from_dynamodb(item)
+            user_tour_dict = user_tour.to_dict()
+            
+            # Fetch the full tour details from the Tours table
+            try:
+                tour_response = dynamodb.query(
+                    TableName="Tours",
+                    IndexName="tourId-index",
+                    KeyConditionExpression="tourId = :t",
+                    ExpressionAttributeValues={":t": {"S": user_tour.tourId}},
+                    Limit=1
+                )
+                tour_items = tour_response.get("Items", [])
+                if tour_items:
+                    tour = Tour.from_dynamodb(tour_items[0])
+                    user_tour_dict["tourDetails"] = tour.to_dict()
+            except ClientError as e:
+                user_tour_dict["tourDetails"] = {"error": e.response["Error"]["Message"]}
+            
+            registered_tours.append(user_tour_dict)
+        
+        return registered_tours
 
     except ClientError as e:
         return [{"error": e.response["Error"]["Message"]}]
