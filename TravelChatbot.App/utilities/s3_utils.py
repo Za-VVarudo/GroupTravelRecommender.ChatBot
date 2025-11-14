@@ -49,3 +49,20 @@ def download_s3_object(bucket: str, key: str, s3_client) -> Dict[str, Any]:
         return {"error": e.response.get("Error", {}).get("Message", str(e))}
     except Exception as e:
         return {"error": str(e)}
+
+
+def generate_presigned_url(bucket: str, key: str, s3_client) -> Optional[str]:
+
+    try:
+        presigned_url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": bucket,
+                "Key": key
+            },
+            ExpiresIn=86400  # 1 day in seconds
+        )
+        return presigned_url
+    except ClientError as e:
+        print(f"Error generating presigned URL for {key}: {e.response['Error']['Message']}")
+        return None

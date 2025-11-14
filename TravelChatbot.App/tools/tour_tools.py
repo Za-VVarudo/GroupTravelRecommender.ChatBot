@@ -6,17 +6,23 @@ from models.tour import Tour
 from models.user_tour import UserTour
 from models.tour_tool_args import GetRegisteredToursArgs, GetToursArgs, GetHeritageGuideArgs, RegisterTourArgs
 from typing import List, Dict, Any, Optional
-from pydantic import Field
 from langchain.tools import tool
 from tools.tour_search import embed_tours, search_tours, embed_pdf_chunks, search_tour_heritage, heritage_chunk_exists
 from utilities.pdf_reader import chunk_text, extract_text_from_pdf_bytes
-from utilities.s3_utils import download_s3_object
+from utilities.s3_utils import download_s3_object, generate_presigned_url
 
 @tool(args_schema=GetRegisteredToursArgs)
 def get_registered_tours(phoneNumber: str) -> List[Dict[str, Any]]:
     """Retrieve all registered tours for a given phone number with additional tour details."""
     dynamodb = boto3.client(
         "dynamodb",
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        region_name=AWS_REGION
+    )
+    
+    s3_client = boto3.client(
+        "s3",
         aws_access_key_id=AWS_ACCESS_KEY_ID,
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
         region_name=AWS_REGION
@@ -49,7 +55,19 @@ def get_registered_tours(phoneNumber: str) -> List[Dict[str, Any]]:
                 tour_items = tour_response.get("Items", [])
                 if tour_items:
                     tour = Tour.from_dynamodb(tour_items[0])
-                    user_tour_dict["tourDetails"] = tour.to_dict()
+                    tour_dict = tour.to_dict()
+                    
+                    # Generate presigned URL for heritageGuide if it exists
+                    if tour_dict.get("heritageGuide"):
+                        pre_signed_url = generate_presigned_url(
+                            s3_client=s3_client,
+                            bucket=HERITAGE_GUIDE_S3_BUCKET,
+                            key=tour_dict["heritageGuide"]
+                        )
+                        if pre_signed_url:
+                            tour_dict["heritageGuide"] = pre_signed_url
+
+                    user_tour_dict["tourDetails"] = tour_dict
             except ClientError as e:
                 user_tour_dict["tourDetails"] = {"error": e.response["Error"]["Message"]}
             
@@ -119,6 +137,24 @@ def get_tours(
         # Convert items to tour dictionaries
         items = response.get("Items", [])
         tours = [Tour.from_dynamodb(item).to_dict() for item in items]
+        
+        s3_client = boto3.client(
+            "s3",
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+            region_name=AWS_REGION
+        )
+
+        # Generate presigned URLs for heritageGuide if present
+        for tour in tours:
+            if tour.get("heritageGuide"):
+                presigned_url = generate_presigned_url(
+                    s3_client=s3_client,
+                    bucket=HERITAGE_GUIDE_S3_BUCKET,
+                    key=tour["heritageGuide"]
+                )
+                if presigned_url:
+                    tour["heritageGuide"] = presigned_url
 
         return {
             "results": tours,
@@ -297,3 +333,4 @@ def register_tour(tourId: str, phoneNumber: str) -> Dict[str, Any]:
 
     except ClientError as e:
         return {"error": e.response["Error"]["Message"]}
+
